@@ -5,6 +5,11 @@ const usernameInput = document.getElementById('username');
 const playButton = document.getElementById('playButton');
 const canvas = document.getElementById('gameCanvas');
 const ctx = canvas.getContext('2d');
+const xpFill = document.getElementById('xpFill');
+const level = document.getElementById('level');
+const upgradeModal = document.getElementById('upgradeModal');
+const upgradeTroopsBtn = document.getElementById('upgradeTroops');
+const upgradeCooldownBtn = document.getElementById('upgradeCooldown');
 
 canvas.width = window.innerWidth;
 canvas.height = window.innerHeight;
@@ -34,6 +39,27 @@ function drawGrid() {
       drawHex(x, y);
     }
   }
+}
+
+function drawReachable() {
+  const me = players[socket.id];
+  if (!me) return;
+
+  const now = Date.now();
+  if (now - me.lastMove < me.moveCooldown) {
+    return;
+  }
+
+  const neighbors = [
+    { q: me.q + 1, r: me.r }, { q: me.q - 1, r: me.r },
+    { q: me.q, r: me.r + 1 }, { q: me.q, r: me.r - 1 },
+    { q: me.q + 1, r: me.r - 1 }, { q: me.q - 1, r: me.r + 1 },
+  ];
+
+  neighbors.forEach(n => {
+    const { x, y } = hexToPixel(n.q, n.r);
+    drawHex(x, y, 'rgba(255, 255, 255, 0.2)');
+  });
 }
 
 function hexToPixel(q, r) {
@@ -77,6 +103,26 @@ socket.on('newPlayer', (playerInfo) => {
 socket.on('playerDisconnected', (playerId) => {
   delete players[playerId];
   redraw();
+});
+
+socket.on('levelUp', (player) => {
+  players[player.playerId] = player;
+  upgradeModal.style.display = 'block';
+});
+
+socket.on('playerUpdated', (player) => {
+  players[player.playerId] = player;
+  redraw();
+});
+
+upgradeTroopsBtn.addEventListener('click', () => {
+  socket.emit('upgrade', 'troops');
+  upgradeModal.style.display = 'none';
+});
+
+upgradeCooldownBtn.addEventListener('click', () => {
+  socket.emit('upgrade', 'cooldown');
+  upgradeModal.style.display = 'none';
 });
 
 socket.on('playerMoved', (playerInfo) => {
@@ -140,13 +186,21 @@ function redraw() {
   if (me) {
     const { x, y } = hexToPixel(me.q, me.r);
     ctx.translate(-x, -y);
+    updateUI(me);
   }
 
   drawGrid();
+  drawReachable();
   drawPlayers();
   drawFogOfWar();
 
   ctx.restore();
+}
+
+function updateUI(player) {
+  const xpPercent = (player.xp / player.nextLevelXp) * 100;
+  xpFill.style.width = `${xpPercent}%`;
+  level.textContent = `Level ${player.level}`;
 }
 
 function drawFogOfWar() {

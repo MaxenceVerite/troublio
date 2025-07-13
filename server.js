@@ -27,6 +27,11 @@ io.on('connection', (socket) => {
     username: socket.handshake.auth.username,
     color: colors[colorIndex % colors.length],
     troops: 3,
+    lastMove: 0,
+    moveCooldown: 2000,
+    xp: 0,
+    level: 1,
+    nextLevelXp: 100,
   };
   colorIndex++;
   // Send the players object to the new player
@@ -38,6 +43,11 @@ io.on('connection', (socket) => {
     const player = players[socket.id];
     if (!player) return;
 
+    const now = Date.now();
+    if (now - player.lastMove < player.moveCooldown) {
+      return;
+    }
+
     // Check if the target is a valid move
     const dist = hex_distance(player, target);
     if (dist === 1) {
@@ -45,38 +55,61 @@ io.on('connection', (socket) => {
       if (opponent) {
         // Combat
         if (player.troops > opponent.troops) {
+          player.xp += Math.floor(10 * Math.pow(1.1, opponent.level));
           player.troops += opponent.troops;
           io.emit('playerDied', opponent.playerId);
           delete players[opponent.playerId];
           player.q = target.q;
           player.r = target.r;
+          player.lastMove = now;
           io.emit('playerMoved', player);
+          checkLevelUp(player);
         } else if (player.troops < opponent.troops) {
+          opponent.xp += Math.floor(10 * Math.pow(1.1, player.level));
           opponent.troops += player.troops;
           io.emit('playerDied', player.playerId);
           delete players[player.playerId];
+          checkLevelUp(opponent);
         } else {
           // Tie
           if (Math.random() < 0.5) {
+            player.xp += Math.floor(10 * Math.pow(1.1, opponent.level));
             player.troops += opponent.troops;
             io.emit('playerDied', opponent.playerId);
             delete players[opponent.playerId];
             player.q = target.q;
             player.r = target.r;
+            player.lastMove = now;
             io.emit('playerMoved', player);
+            checkLevelUp(player);
           } else {
+            opponent.xp += Math.floor(10 * Math.pow(1.1, player.level));
             opponent.troops += player.troops;
             io.emit('playerDied', player.playerId);
             delete players[player.playerId];
+            checkLevelUp(opponent);
           }
         }
       } else {
         // Move
         player.q = target.q;
         player.r = target.r;
+        player.lastMove = now;
         io.emit('playerMoved', player);
       }
     }
+  });
+
+  socket.on('upgrade', (type) => {
+    const player = players[socket.id];
+    if (!player) return;
+
+    if (type === 'troops') {
+      player.troops++;
+    } else if (type === 'cooldown') {
+      player.moveCooldown *= 0.9;
+    }
+    io.emit('playerUpdated', player);
   });
 
   socket.on('disconnect', () => {
@@ -96,6 +129,15 @@ function hex_distance(a, b) {
   return (Math.abs(a.q - b.q)
         + Math.abs(a.q + a.r - b.q - b.r)
         + Math.abs(a.r - b.r)) / 2;
+}
+
+function checkLevelUp(player) {
+  if (player.xp >= player.nextLevelXp) {
+    player.level++;
+    player.xp -= player.nextLevelXp;
+    player.nextLevelXp = Math.floor(player.nextLevelXp * 1.5);
+    io.to(player.playerId).emit('levelUp', player);
+  }
 }
 
 const PORT = process.env.PORT || 3000;
