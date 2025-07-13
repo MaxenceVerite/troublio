@@ -152,10 +152,11 @@ canvas.addEventListener('click', (event) => {
   if (!me) return;
 
   const rect = canvas.getBoundingClientRect();
-  const x = event.clientX - rect.left - canvas.width / 2;
-  const y = event.clientY - rect.top - canvas.height / 2;
+  const x = (event.clientX - rect.left - canvas.width / 2) / 1.5;
+  const y = (event.clientY - rect.top - canvas.height / 2) / 1.5;
 
-  const { q, r } = pixelToHex(x, y);
+  const mePos = hexToPixel(me.q, me.r);
+  const { q, r } = pixelToHex(x + mePos.x, y + mePos.y);
 
   socket.emit('move', { q, r });
 });
