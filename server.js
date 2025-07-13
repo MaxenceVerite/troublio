@@ -16,9 +16,10 @@ io.on('connection', (socket) => {
 
   // Create a new player and add it to our players object
   players[socket.id] = {
-    x: Math.floor(Math.random() * 20),
-    y: Math.floor(Math.random() * 20),
+    q: Math.floor(Math.random() * 20) - 10,
+    r: Math.floor(Math.random() * 20) - 10,
     playerId: socket.id,
+    username: socket.handshake.auth.username,
   };
   // Send the players object to the new player
   socket.emit('currentPlayers', players);
