@@ -10,6 +10,11 @@ const io = socketIo(server);
 app.use(express.static('public'));
 
 const players = {};
+const colors = [
+  '#FF0000', '#00FF00', '#0000FF', '#FFFF00', '#FF00FF', '#00FFFF',
+  '#FFA500', '#800080', '#008000', '#FFC0CB', '#800000', '#000080',
+];
+let colorIndex = 0;
 
 io.on('connection', (socket) => {
   console.log('a user connected:', socket.id);
@@ -20,7 +25,10 @@ io.on('connection', (socket) => {
     r: Math.floor(Math.random() * 20) - 10,
     playerId: socket.id,
     username: socket.handshake.auth.username,
+    color: colors[colorIndex % colors.length],
+    troops: 3,
   };
+  colorIndex++;
   // Send the players object to the new player
   socket.emit('currentPlayers', players);
   // Update all other players of the new player
@@ -32,10 +40,42 @@ io.on('connection', (socket) => {
 
     // Check if the target is a valid move
     const dist = hex_distance(player, target);
-    if (dist === 1 && !isOccupied(target)) {
-      player.q = target.q;
-      player.r = target.r;
-      io.emit('playerMoved', player);
+    if (dist === 1) {
+      const opponent = getPlayerAt(target);
+      if (opponent) {
+        // Combat
+        if (player.troops > opponent.troops) {
+          player.troops += opponent.troops;
+          io.emit('playerDied', opponent.playerId);
+          delete players[opponent.playerId];
+          player.q = target.q;
+          player.r = target.r;
+          io.emit('playerMoved', player);
+        } else if (player.troops < opponent.troops) {
+          opponent.troops += player.troops;
+          io.emit('playerDied', player.playerId);
+          delete players[player.playerId];
+        } else {
+          // Tie
+          if (Math.random() < 0.5) {
+            player.troops += opponent.troops;
+            io.emit('playerDied', opponent.playerId);
+            delete players[opponent.playerId];
+            player.q = target.q;
+            player.r = target.r;
+            io.emit('playerMoved', player);
+          } else {
+            opponent.troops += player.troops;
+            io.emit('playerDied', player.playerId);
+            delete players[player.playerId];
+          }
+        }
+      } else {
+        // Move
+        player.q = target.q;
+        player.r = target.r;
+        io.emit('playerMoved', player);
+      }
     }
   });
 
@@ -44,12 +84,12 @@ io.on('connection', (socket) => {
     // Remove this player from our players object
     delete players[socket.id];
     // Emit a message to all players to remove this player
-    io.emit('disconnect', socket.id);
+    io.emit('playerDisconnected', socket.id);
   });
 });
 
-function isOccupied(target) {
-  return Object.values(players).some(p => p.q === target.q && p.r === target.r);
+function getPlayerAt(target) {
+  return Object.values(players).find(p => p.q === target.q && p.r === target.r);
 }
 
 function hex_distance(a, b) {
