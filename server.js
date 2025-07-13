@@ -28,7 +28,7 @@ io.on('connection', (socket) => {
     color: colors[colorIndex % colors.length],
     troops: 3,
     lastMove: 0,
-    moveCooldown: 2000,
+    moveCooldown: 1000,
     xp: 0,
     level: 1,
     nextLevelXp: 100,
@@ -44,7 +44,8 @@ io.on('connection', (socket) => {
     if (!player) return;
 
     const now = Date.now();
-    if (now - player.lastMove < player.moveCooldown) {
+    const cooldown = player.moveCooldown + player.troops * 100;
+    if (now - player.lastMove < cooldown) {
       return;
     }
 

@@ -7,6 +7,7 @@ const canvas = document.getElementById('gameCanvas');
 const ctx = canvas.getContext('2d');
 const xpFill = document.getElementById('xpFill');
 const level = document.getElementById('level');
+const cooldownFill = document.getElementById('cooldownFill');
 const upgradeModal = document.getElementById('upgradeModal');
 const upgradeTroopsBtn = document.getElementById('upgradeTroops');
 const upgradeCooldownBtn = document.getElementById('upgradeCooldown');
@@ -32,13 +33,20 @@ const HEX_SIZE = 48;
 const HEX_WIDTH = Math.sqrt(3) * HEX_SIZE;
 const HEX_HEIGHT = 2 * HEX_SIZE;
 
-function drawGrid() {
-  for (let q = -10; q < 10; q++) {
-    for (let r = -10; r < 10; r++) {
-      const { x, y } = hexToPixel(q, r);
-      drawHex(x, y);
-    }
+const grid = [];
+const MAP_RADIUS = 10;
+for (let q = -MAP_RADIUS; q <= MAP_RADIUS; q++) {
+  const r1 = Math.max(-MAP_RADIUS, -q - MAP_RADIUS);
+  const r2 = Math.min(MAP_RADIUS, -q + MAP_RADIUS);
+  for (let r = r1; r <= r2; r++) {
+    grid.push({ q, r, ...hexToPixel(q, r) });
   }
+}
+
+function drawGrid() {
+  grid.forEach(hex => {
+    drawHex(hex.x, hex.y);
+  });
 }
 
 function drawReachable() {
@@ -46,7 +54,8 @@ function drawReachable() {
   if (!me) return;
 
   const now = Date.now();
-  if (now - me.lastMove < me.moveCooldown) {
+  const cooldown = me.moveCooldown + me.troops * 100;
+  if (now - me.lastMove < cooldown) {
     return;
   }
 
@@ -82,7 +91,12 @@ function drawHex(x, y, fillStyle = null) {
     }
   }
   ctx.closePath();
-  ctx.fillStyle = fillStyle || '#333';
+
+  const grad = ctx.createLinearGradient(x - size, y - size, x + size, y + size);
+  grad.addColorStop(0, '#444');
+  grad.addColorStop(1, '#222');
+
+  ctx.fillStyle = fillStyle || grad;
   ctx.fill();
   ctx.strokeStyle = '#555';
   ctx.stroke();
@@ -136,8 +150,11 @@ socket.on('playerMoved', (playerInfo) => {
 });
 
 socket.on('playerDied', (playerId) => {
-  delete players[playerId];
-  redraw();
+  const player = players[playerId];
+  if (player) {
+    player.isDying = true;
+    player.deathAnimTimer = 1;
+  }
 });
 
 function update() {
@@ -145,8 +162,14 @@ function update() {
   const dt = (now - lastUpdate) / 1000;
   lastUpdate = now;
 
-  Object.values(players).forEach(player => {
-    if (player.targetQ !== undefined && player.targetR !== undefined) {
+  Object.keys(players).forEach(id => {
+    const player = players[id];
+    if (player.isDying) {
+      player.deathAnimTimer -= dt;
+      if (player.deathAnimTimer <= 0) {
+        delete players[id];
+      }
+    } else if (player.targetQ !== undefined && player.targetR !== undefined) {
       const targetPos = hexToPixel(player.targetQ, player.targetR);
       const currentPos = hexToPixel(player.q, player.r);
 
@@ -201,6 +224,11 @@ function updateUI(player) {
   const xpPercent = (player.xp / player.nextLevelXp) * 100;
   xpFill.style.width = `${xpPercent}%`;
   level.textContent = `Level ${player.level}`;
+
+  const now = Date.now();
+  const cooldown = player.moveCooldown + player.troops * 100;
+  const cooldownPercent = Math.min(((now - player.lastMove) / cooldown) * 100, 100);
+  cooldownFill.style.width = `${cooldownPercent}%`;
 }
 
 function drawFogOfWar() {
@@ -209,15 +237,12 @@ function drawFogOfWar() {
 
   const visionRadius = 5; // in hexes
 
-  for (let q = -15; q < 15; q++) {
-    for (let r = -15; r < 15; r++) {
-      const dist = hex_distance(me, { q, r });
-      if (dist > visionRadius) {
-        const { x, y } = hexToPixel(q, r);
-        drawHex(x, y, 'rgba(0, 0, 0, 0.5)');
-      }
+  grid.forEach(hex => {
+    const dist = hex_distance(me, hex);
+    if (dist > visionRadius) {
+      drawHex(hex.x, hex.y, 'rgba(0, 0, 0, 0.5)');
     }
-  }
+  });
 }
 
 function hex_distance(a, b) {
@@ -227,19 +252,30 @@ function hex_distance(a, b) {
 }
 
 function drawPlayers() {
+  const me = players[socket.id];
+  if (!me) return;
+
+  const visionRadius = 5;
+
   Object.values(players).forEach(player => {
-    const { x, y } = hexToPixel(player.q, player.r);
-    drawPlayer(x, y, player.username, player.color);
+    if (player.playerId === me.playerId || hex_distance(me, player) <= visionRadius) {
+      drawPlayer(player);
+    }
   });
 }
 
 const soldierImg = new Image();
 soldierImg.src = 'img/soldier.png';
 
-function drawPlayer(x, y, username, color) {
+function drawPlayer(player) {
+  const { x, y } = hexToPixel(player.q, player.r);
+
   ctx.save();
+  if (player.isDying) {
+    ctx.globalAlpha = player.deathAnimTimer;
+  }
   ctx.globalCompositeOperation = 'source-atop';
-  ctx.fillStyle = color;
+  ctx.fillStyle = player.color;
   ctx.fillRect(x - 16, y - 16, 32, 32);
   ctx.globalCompositeOperation = 'source-over';
   ctx.drawImage(soldierImg, x - 16, y - 16, 32, 32);
@@ -248,7 +284,7 @@ function drawPlayer(x, y, username, color) {
   ctx.fillStyle = 'white';
   ctx.font = '12px Arial';
   ctx.textAlign = 'center';
-  ctx.fillText(username, x, y - 20);
+  ctx.fillText(player.username, x, y - 20);
 }
 
 canvas.addEventListener('click', (event) => {
