@@ -56,7 +56,7 @@ function hex_distance(a, b) {
   return (Math.abs(a.q - b.q)
         + Math.abs(a.q + a.r - b.q - b.r)
         + Math.abs(a.r - b.r)) / 2;
-});
+}
 
 const PORT = process.env.PORT || 3000;
 server.listen(PORT, () => {
