@@ -26,6 +26,19 @@ io.on('connection', (socket) => {
   // Update all other players of the new player
   socket.broadcast.emit('newPlayer', players[socket.id]);
 
+  socket.on('move', (target) => {
+    const player = players[socket.id];
+    if (!player) return;
+
+    // Check if the target is a valid move
+    const dist = hex_distance(player, target);
+    if (dist === 1 && !isOccupied(target)) {
+      player.q = target.q;
+      player.r = target.r;
+      io.emit('playerMoved', player);
+    }
+  });
+
   socket.on('disconnect', () => {
     console.log('user disconnected:', socket.id);
     // Remove this player from our players object
@@ -33,6 +46,16 @@ io.on('connection', (socket) => {
     // Emit a message to all players to remove this player
     io.emit('disconnect', socket.id);
   });
+});
+
+function isOccupied(target) {
+  return Object.values(players).some(p => p.q === target.q && p.r === target.r);
+}
+
+function hex_distance(a, b) {
+  return (Math.abs(a.q - b.q)
+        + Math.abs(a.q + a.r - b.q - b.r)
+        + Math.abs(a.r - b.r)) / 2;
 });
 
 const PORT = process.env.PORT || 3000;

@@ -23,7 +23,7 @@ socket.on('connect', () => {
   console.log('connected to server');
 });
 
-const HEX_SIZE = 32;
+const HEX_SIZE = 48;
 const HEX_WIDTH = Math.sqrt(3) * HEX_SIZE;
 const HEX_HEIGHT = 2 * HEX_SIZE;
 
@@ -37,8 +37,8 @@ function drawGrid() {
 }
 
 function hexToPixel(q, r) {
-  const x = HEX_SIZE * (Math.sqrt(3) * q + Math.sqrt(3) / 2 * r) + canvas.width / 2;
-  const y = HEX_SIZE * (3 / 2 * r) + canvas.height / 2;
+  const x = HEX_SIZE * (Math.sqrt(3) * q + Math.sqrt(3) / 2 * r);
+  const y = HEX_SIZE * (3 / 2 * r);
   return { x, y };
 }
 
@@ -80,22 +80,29 @@ socket.on('disconnect', (playerId) => {
   redraw();
 });
 
+socket.on('playerMoved', (playerInfo) => {
+  players[playerInfo.playerId] = playerInfo;
+  redraw();
+});
+
 function redraw() {
   ctx.clearRect(0, 0, canvas.width, canvas.height);
+  ctx.save();
+  ctx.translate(canvas.width / 2, canvas.height / 2);
+  ctx.scale(1.5, 1.5);
+
 
   const me = players[socket.id];
   if (me) {
-    ctx.save();
     const { x, y } = hexToPixel(me.q, me.r);
-    ctx.translate(canvas.width / 2 - x, canvas.height / 2 - y);
-    drawGrid();
-    drawPlayers();
-    drawFogOfWar();
-    ctx.restore();
-  } else {
-    drawGrid();
-    drawPlayers();
+    ctx.translate(-x, -y);
   }
+
+  drawGrid();
+  drawPlayers();
+  drawFogOfWar();
+
+  ctx.restore();
 }
 
 function drawFogOfWar() {
@@ -128,16 +135,53 @@ function drawPlayers() {
   });
 }
 
+const soldierImg = new Image();
+soldierImg.src = 'img/soldier.png';
+
 function drawPlayer(x, y, username) {
-  ctx.fillStyle = 'blue';
-  ctx.beginPath();
-  ctx.arc(x, y, 10, 0, 2 * Math.PI);
-  ctx.fill();
+  ctx.drawImage(soldierImg, x - 16, y - 16, 32, 32);
 
   ctx.fillStyle = 'white';
   ctx.font = '12px Arial';
   ctx.textAlign = 'center';
-  ctx.fillText(username, x, y - 15);
+  ctx.fillText(username, x, y - 20);
+}
+
+canvas.addEventListener('click', (event) => {
+  const me = players[socket.id];
+  if (!me) return;
+
+  const rect = canvas.getBoundingClientRect();
+  const x = event.clientX - rect.left - canvas.width / 2;
+  const y = event.clientY - rect.top - canvas.height / 2;
+
+  const { q, r } = pixelToHex(x, y);
+
+  socket.emit('move', { q, r });
+});
+
+function pixelToHex(x, y) {
+  const q = (Math.sqrt(3) / 3 * x - 1 / 3 * y) / HEX_SIZE;
+  const r = (2 / 3 * y) / HEX_SIZE;
+  return hex_round({ q, r });
+}
+
+function hex_round(h) {
+  const q = Math.round(h.q);
+  const r = Math.round(h.r);
+  const s = Math.round(-h.q - h.r);
+
+  const q_diff = Math.abs(q - h.q);
+  const r_diff = Math.abs(r - h.r);
+  const s_diff = Math.abs(s - (-h.q - h.r));
+
+  if (q_diff > r_diff && q_diff > s_diff) {
+    return { q: -r - s, r };
+  } else if (r_diff > s_diff) {
+    return { q, r: -q - s };
+  } else {
+    return { q, r };
+  }
 }
 
 redraw();
