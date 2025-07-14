@@ -27,6 +27,7 @@ io.on('connection', (socket) => {
     username: socket.handshake.auth.username,
     color: colors[colorIndex % colors.length],
     troops: 3,
+    hp: 3,
     lastMove: 0,
     moveCooldown: 1000,
     xp: 0,
@@ -54,43 +55,11 @@ io.on('connection', (socket) => {
     if (dist === 1) {
       const opponent = getPlayerAt(target);
       if (opponent) {
-        // Combat
-        if (player.troops > opponent.troops) {
-          player.xp += Math.floor(10 * Math.pow(1.1, opponent.level));
-          player.troops += opponent.troops;
-          io.emit('playerDied', opponent.playerId);
-          delete players[opponent.playerId];
-          player.q = target.q;
-          player.r = target.r;
-          player.lastMove = now;
-          io.emit('playerMoved', player);
-          checkLevelUp(player);
-        } else if (player.troops < opponent.troops) {
-          opponent.xp += Math.floor(10 * Math.pow(1.1, player.level));
-          opponent.troops += player.troops;
-          io.emit('playerDied', player.playerId);
-          delete players[player.playerId];
-          checkLevelUp(opponent);
-        } else {
-          // Tie
-          if (Math.random() < 0.5) {
-            player.xp += Math.floor(10 * Math.pow(1.1, opponent.level));
-            player.troops += opponent.troops;
-            io.emit('playerDied', opponent.playerId);
-            delete players[opponent.playerId];
-            player.q = target.q;
-            player.r = target.r;
-            player.lastMove = now;
-            io.emit('playerMoved', player);
-            checkLevelUp(player);
-          } else {
-            opponent.xp += Math.floor(10 * Math.pow(1.1, player.level));
-            opponent.troops += player.troops;
-            io.emit('playerDied', player.playerId);
-            delete players[player.playerId];
-            checkLevelUp(opponent);
-          }
-        }
+        // For now, let's just move to the opponent's cell
+        player.q = target.q;
+        player.r = target.r;
+        player.lastMove = now;
+        io.emit('playerMoved', player);
       } else {
         // Move
         player.q = target.q;
@@ -145,3 +114,32 @@ const PORT = process.env.PORT || 3000;
 server.listen(PORT, () => {
   console.log(`listening on *:${PORT}`);
 });
+
+setInterval(() => {
+  Object.values(players).forEach(player => {
+    const opponents = getOpponentsInRange(player, 3);
+    if (opponents.length > 0) {
+      const target = opponents[0]; // For now, just target the first one
+      for (let i = 0; i < player.troops; i++) {
+        io.emit('projectile', {
+          from: player.playerId,
+          to: target.playerId,
+        });
+        target.hp--;
+        target.troops = Math.ceil(target.hp);
+        if (target.hp <= 0) {
+          io.emit('playerDied', target.playerId);
+          delete players[target.playerId];
+        } else {
+          io.emit('playerUpdated', target);
+        }
+      }
+    }
+  });
+}, 1000);
+
+function getOpponentsInRange(player, range) {
+  return Object.values(players).filter(p => {
+    return p.playerId !== player.playerId && hex_distance(player, p) <= range;
+  });
+}

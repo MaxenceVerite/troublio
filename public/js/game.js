@@ -103,6 +103,15 @@ function drawHex(x, y, fillStyle = null) {
 }
 
 let players = {};
+const projectiles = [];
+
+socket.on('projectile', ({ from, to }) => {
+  const fromPlayer = players[from];
+  const toPlayer = players[to];
+  if (fromPlayer && toPlayer) {
+    projectiles.push(new Projectile(fromPlayer, toPlayer));
+  }
+});
 
 socket.on('currentPlayers', (serverPlayers) => {
   players = serverPlayers;
@@ -162,6 +171,13 @@ function update() {
   const dt = (now - lastUpdate) / 1000;
   lastUpdate = now;
 
+  projectiles.forEach((p, i) => {
+    p.update(dt);
+    if (p.isFinished()) {
+      projectiles.splice(i, 1);
+    }
+  });
+
   Object.keys(players).forEach(id => {
     const player = players[id];
     if (player.isDying) {
@@ -215,6 +231,7 @@ function redraw() {
   drawGrid();
   drawReachable();
   drawPlayers();
+  drawProjectiles();
   drawFogOfWar();
 
   ctx.restore();
@@ -229,6 +246,10 @@ function updateUI(player) {
   const cooldown = player.moveCooldown + player.troops * 100;
   const cooldownPercent = Math.min(((now - player.lastMove) / cooldown) * 100, 100);
   cooldownFill.style.width = `${cooldownPercent}%`;
+}
+
+function drawProjectiles() {
+  projectiles.forEach(p => p.draw(ctx));
 }
 
 function drawFogOfWar() {
