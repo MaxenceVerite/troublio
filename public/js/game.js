@@ -306,6 +306,33 @@ function drawPlayer(player) {
   ctx.font = '12px Arial';
   ctx.textAlign = 'center';
   ctx.fillText(player.username, x, y - 20);
+
+  drawHealthBar(x, y - 30, player.hp);
+}
+
+function drawHealthBar(x, y, hp) {
+  const barWidth = 40;
+  const barHeight = 5;
+  const hpPerBar = 5;
+  const numBars = Math.ceil(hp / hpPerBar);
+
+  for (let i = 0; i < numBars; i++) {
+    const barX = x - barWidth / 2 + (i % 10) * (barWidth / 10);
+    const barY = y - Math.floor(i / 10) * (barHeight + 2);
+
+    let color = '#00ff00'; // Green
+    if (i >= 10) {
+      color = '#0000ff'; // Blue
+    }
+
+    const hpInBar = Math.min(hp - i * hpPerBar, hpPerBar);
+    const width = (hpInBar / hpPerBar) * (barWidth / 10);
+
+    ctx.fillStyle = '#555';
+    ctx.fillRect(barX, barY, barWidth / 10, barHeight);
+    ctx.fillStyle = color;
+    ctx.fillRect(barX, barY, width, barHeight);
+  }
 }
 
 canvas.addEventListener('click', (event) => {

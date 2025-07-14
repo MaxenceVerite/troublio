@@ -27,7 +27,7 @@ io.on('connection', (socket) => {
     username: socket.handshake.auth.username,
     color: colors[colorIndex % colors.length],
     troops: 3,
-    hp: 3,
+    hp: 15,
     lastMove: 0,
     moveCooldown: 1000,
     xp: 0,
@@ -76,6 +76,7 @@ io.on('connection', (socket) => {
 
     if (type === 'troops') {
       player.troops++;
+      player.hp += 5;
     } else if (type === 'cooldown') {
       player.moveCooldown *= 0.9;
     }
@@ -125,8 +126,8 @@ setInterval(() => {
           from: player.playerId,
           to: target.playerId,
         });
-        target.hp--;
-        target.troops = Math.ceil(target.hp);
+        target.hp -= 0.5;
+        target.troops = Math.ceil(target.hp / 5);
         if (target.hp <= 0) {
           io.emit('playerDied', target.playerId);
           delete players[target.playerId];
